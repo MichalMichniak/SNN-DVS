@@ -1,6 +1,6 @@
 # SNN-DVS
 SNN-DVS
-
+Najważniejsze pliki, pominąłem jakieś niepotrzebne testy itp.
 Pliki stricte do TTFS:
 
 * SNN_test.ipnb - TTFS standardowe
