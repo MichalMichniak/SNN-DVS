@@ -29,3 +29,32 @@ NCaltech:
 
 CIFAR10-DVS:
 * nCIFAR10.ipynb - preprocessing
+
+Struktura folderów z datasetami:
+```
+Datasety/
+│
+├── CIFAR10-DVS/
+│   ├── airplane/
+│   ├── automobile/
+│   ├── ...
+│   └── truck/
+│
+├── NMINST/          <---- tutaj pomyłka w nazewnictwie (to jest folder na MINST-DVS)
+│   ├── grabbed_data0/
+│   ├── ...
+│   └── grabbed_data9/
+│
+├── NCaltech/
+│   ├── Caltech101/
+│   │   ├── accordion/
+│   │   ├── ...
+│   │   └── yin_yang/
+│   └── Caltech101_annotations/
+├── prophesee_automotive_dataset_toolbox_master/
+└── Prophesee_Dataset_n_cars/
+    ├── n-cars_test/
+    ├── ...
+    └── n-cars_train/
+```
+
