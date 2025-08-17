@@ -1,4 +1,19 @@
 # SNN-DVS
+
+Files for data preprocessing (need to be evaluated before training):
+* NCars_corrected.ipynb
+* NCars_corrected_trilinear.ipynb
+* nCaltech101_corrected.ipynb
+* nCaltech101_corrected_trilinear.ipynb
+* MINST-DVS_dataset_corrected.ipynb
+* MINST-DVS_dataset_corrected_trilinear.ipynb
+* CIFAR10-DVS_corrected.ipynb
+* CIFAR10-DVS_corrected_trilinear.ipynb
+
+Files for training ResNets:
+
+
+
 SNN-DVS
 Najważniejsze pliki, pominąłem jakieś niepotrzebne testy itp.
 Pliki stricte do TTFS:
