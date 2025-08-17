@@ -86,7 +86,7 @@ class SpikingDense(nn.Module):
         """
         # Call the custom spiking logic
         if self.bias:
-            print(tj.shape)
+            # print(tj.shape)
             new_tj = torch.concat((tj, torch.tensor([[(self.t_min - 1)]])), dim=1)
             output = call_spiking(new_tj, self.kernel, self.D_i, self.t_min, self.t_max, noise=self.noise)
         else:
