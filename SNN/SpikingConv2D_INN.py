@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class SpikingConv2D(nn.Module):
     def __init__(self, filters, name, X_n=1, padding='same', kernel_size=(3,3), robustness_params=None, kernels = None, device = 'cuda:0', biases = None, stride=1):
@@ -39,23 +40,29 @@ class SpikingConv2D(nn.Module):
         # Parameter for different thresholds
         self.D_i = nn.Parameter(torch.zeros(9, filters, dtype=torch.float32)).to(self.device)
 
-    def set_params(self, t_min_prev, t_min, minimal_t_max = 0):
+    def set_params(self, t_min_prev, t_min, in_ranges_max, minimal_t_max = 0):
         """
         Set t_min_prev, t_min, t_max, J_ij (kernel) and vartheta_i (threshold) parameters of this layer.
         """
         max_W = torch.maximum(self.kernel,torch.zeros(self.kernel.shape).to(self.device))
-        max_input = (t_min - t_min_prev) * torch.ones(self.kernel.shape).to(self.device)
+        # print(max_W.shape)
+        
+        max_input = (in_ranges_max.unsqueeze(-1).unsqueeze(-1)).to(self.device) * torch.ones(self.kernel.shape[1:]).to(self.device)
+
+        # print(max_input.shape)
         if self.B is not None:
-            max_V = torch.max(torch.sum(torch.mul(max_input,max_W),(1,2,3)) + torch.maximum(self.B.unsqueeze(dim=1), torch.zeros(self.B.unsqueeze(dim=1).shape)))
+            max_V = F.relu(torch.max(torch.sum(torch.mul(max_input,max_W),(1,2,3))+self.B.squeeze(1)))
+            max_values = F.relu(torch.sum(torch.mul(max_input,max_W),(1,2,3))+self.B.squeeze(1))
+            max_V = F.relu(torch.max(torch.sum(torch.mul(max_input,max_W),(1,2,3))+torch.maximum(self.B.squeeze(1), torch.zeros(self.B.squeeze(1).shape))))
         else:
-            max_V = torch.max(torch.sum(torch.mul(max_input,max_W),(1,2,3)))
+            max_V = F.relu(torch.max(torch.sum(torch.mul(max_input,max_W),(1,2,3))))
+            max_values = F.relu(torch.sum(torch.mul(max_input,max_W),(1,2,3)))
         self.t_min_prev = torch.tensor(t_min_prev, dtype=torch.float64, requires_grad=False)
         self.t_min = torch.tensor(t_min, dtype=torch.float64, requires_grad=False)
         self.t_max = torch.tensor(max(t_min + self.B_n*max_V, minimal_t_max), dtype=torch.float64, requires_grad=False)
-
         
         # Returning for function signature consistency
-        return t_min, max(t_min + self.B_n*max_V, minimal_t_max)
+        return t_min, max(t_min + self.B_n*max_V, minimal_t_max), max_values
 
     def call_spiking(self, tj, W, D_i, t_min, t_max, noise):
         """
@@ -86,7 +93,7 @@ class SpikingConv2D(nn.Module):
             padding_size = int(self.padding == 'same') * ((self.kernel_size[0]-1) // 2)
         image_same_size = tj.size(2) 
         image_valid_size = image_same_size - self.kernel_size[0] + 1
-        
+
 
         tj_shape = tj.shape
         # Dodanie paddingu
@@ -116,16 +123,13 @@ class SpikingConv2D(nn.Module):
         
         
         if (self.padding == 'valid' or self.BN != 1 or self.BN_before_ReLU == 1) and (self.B is None): 
-            # tj = tj.view(-1, W.size(0))
+
             ti = self.call_spiking(tj, W, self.D_i[0], self.t_min, self.t_max, noise=self.noise).transpose(1, 2)
             if self.padding == 'valid':
-                # ti = ti.view(-1, image_valid_size, image_valid_size, self.filters)
                 ti = ti.view(batch_size, out_channels, output_height, output_width)
-                #ti = torch.nn.functional.fold(ti, (tj_shape[-1],tj_shape[-1]), (1, 1)) #assuming square input
             else:
                 ti = ti.view(batch_size, out_channels, output_height, output_width)
-                #ti = torch.nn.functional.fold(ti, (tj_shape[-1],tj_shape[-1]), (1, 1)) #assuming square input
-                # ti = ti.view(-1, image_same_size, image_same_size, self.filters)
+
         elif self.B is not None:
             ## concatenating simple "one" to vector of times
             one_as_time = self.t_min - 1
@@ -134,42 +138,8 @@ class SpikingConv2D(nn.Module):
             W = torch.concat((W,self.B.T),0)
             ti = self.call_spiking(tj, W, self.D_i[0], self.t_min, self.t_max, noise=self.noise).transpose(1, 2)
             if self.padding == 'valid':
-                # ti = ti.view(-1, image_valid_size, image_valid_size, self.filters)
-                # ti = torch.nn.functional.fold(ti, (tj_shape[-1],tj_shape[-1]), (1, 1)) #assuming square input
                 ti = ti.view(batch_size, out_channels, output_height, output_width)
             else:
-                # ti = torch.nn.functional.fold(ti, (tj_shape[-1],tj_shape[-1]), (1, 1)) #assuming square input
                 ti = ti.view(batch_size, out_channels, output_height, output_width)
 
         return ti
-
-
-
-def fuse_conv_and_bn(conv, bn, device = 'cuda:0'):
-	#
-	# init
-	fusedconv = torch.nn.Conv2d(
-		conv.in_channels,
-		conv.out_channels,
-		kernel_size=conv.kernel_size,
-		stride=conv.stride,
-		padding=conv.padding,
-		bias=True
-	)
-	#
-	# prepare filters
-	w_conv = conv.weight.clone().view(conv.out_channels, -1)
-	w_bn = torch.diag(bn.weight.div(torch.sqrt(bn.eps+bn.running_var)))
-	with torch.no_grad():
-		fusedconv.weight.copy_( torch.mm(w_bn, w_conv).view(fusedconv.weight.size()) )
-	#
-	# prepare spatial bias
-	if conv.bias is not None:
-		b_conv = conv.bias
-	else:
-		b_conv = torch.zeros( conv.weight.size(0) ).to(device)
-	b_bn = bn.bias - bn.weight.mul(bn.running_mean).div(torch.sqrt(bn.running_var + bn.eps))
-	with torch.no_grad():
-		fusedconv.bias.copy_( (torch.matmul(w_bn, b_conv) + b_bn) )
-	
-	return fusedconv.to(device)
