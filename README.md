@@ -11,6 +11,7 @@ Files for data preprocessing (need to be evaluated before training):
 * CIFAR10-DVS_corrected_trilinear.ipynb
 > [!WARNING]
 > Preprocessing makes .npy files that can be huge. Please be aware of the amount of free memory space.
+
 Files for training ResNets:
 * CIFAR10-DVS_resnet...
 * NCarsReLU_resnet...
